@@ -1,0 +1,283 @@
+// Prisma Schema — Hotel Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  admin
+  receptionist
+  housekeeper
+  guest
+}
+
+enum RoomStatus {
+  available
+  occupied
+  maintenance
+  cleaning
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  checked_in
+  checked_out
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  card
+  online
+  bank_transfer
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  refunded
+  failed
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+  refunded
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String    @map("first_name") @db.VarChar(100)
+  lastName      String    @map("last_name") @db.VarChar(100)
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash")
+  phone         String?   @db.VarChar(20)
+  role          Role      @default(guest)
+  avatarUrl     String?   @map("avatar_url")
+  isActive      Boolean   @default(true) @map("is_active")
+  refreshToken  String?   @map("refresh_token")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  hotels        Hotel[]
+  bookings      Booking[]
+  reviews       Review[]
+  employee      Employee?
+
+  @@map("users")
+}
+
+model Hotel {
+  id            String    @id @default(uuid())
+  name          String    @db.VarChar(255)
+  description   String?
+  address       String
+  city          String    @db.VarChar(100)
+  country       String    @db.VarChar(100)
+  phone         String?   @db.VarChar(20)
+  email         String?   @db.VarChar(255)
+  starRating    Int       @default(3) @map("star_rating")
+  checkInTime   String    @default("14:00") @map("check_in_time")
+  checkOutTime  String    @default("12:00") @map("check_out_time")
+  images        String[]
+  isActive      Boolean   @default(true) @map("is_active")
+  ownerId       String    @map("owner_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  owner         User       @relation(fields: [ownerId], references: [id])
+  rooms         Room[]
+  roomTypes     RoomType[]
+  bookings      Booking[]
+  employees     Employee[]
+  services      Service[]
+  reviews       Review[]
+  invoices      Invoice[]
+
+  @@map("hotels")
+}
+
+model RoomType {
+  id          String   @id @default(uuid())
+  hotelId     String   @map("hotel_id")
+  name        String   @db.VarChar(100)
+  description String?
+  capacity    Int      @default(2)
+  basePrice   Decimal  @map("base_price") @db.Decimal(10, 2)
+  images      String[]
+  amenities   String[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rooms       Room[]
+
+  @@map("room_types")
+}
+
+model Room {
+  id           String     @id @default(uuid())
+  hotelId      String     @map("hotel_id")
+  roomNumber   String     @map("room_number") @db.VarChar(10)
+  roomTypeId   String     @map("room_type_id")
+  floor        Int        @default(1)
+  status       RoomStatus @default(available)
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  hotel        Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomType     RoomType   @relation(fields: [roomTypeId], references: [id])
+  bookings     Booking[]
+
+  @@unique([hotelId, roomNumber])
+  @@map("rooms")
+}
+
+model Booking {
+  id              String        @id @default(uuid())
+  bookingNumber   String        @unique @map("booking_number") @db.VarChar(20)
+  guestId         String        @map("guest_id")
+  roomId          String        @map("room_id")
+  hotelId         String        @map("hotel_id")
+  checkInDate     DateTime      @map("check_in_date") @db.Date
+  checkOutDate    DateTime      @map("check_out_date") @db.Date
+  adults          Int           @default(1)
+  children        Int           @default(0)
+  status          BookingStatus @default(pending)
+  specialRequests String?       @map("special_requests")
+  totalPrice      Decimal       @map("total_price") @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  guest           User             @relation(fields: [guestId], references: [id])
+  room            Room             @relation(fields: [roomId], references: [id])
+  hotel           Hotel            @relation(fields: [hotelId], references: [id])
+  bookingServices BookingService[]
+  review          Review?
+  invoice         Invoice?
+
+  @@map("bookings")
+}
+
+model Employee {
+  id         String   @id @default(uuid())
+  userId     String   @unique @map("user_id")
+  hotelId    String   @map("hotel_id")
+  department String   @db.VarChar(100)
+  position   String   @db.VarChar(100)
+  salary     Decimal  @db.Decimal(10, 2)
+  hireDate   DateTime @map("hire_date") @db.Date
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user       User     @relation(fields: [userId], references: [id])
+  hotel      Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("employees")
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  hotelId     String   @map("hotel_id")
+  name        String   @db.VarChar(255)
+  description String?
+  category    String   @db.VarChar(100)
+  price       Decimal  @db.Decimal(10, 2)
+  isAvailable Boolean  @default(true) @map("is_available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hotel           Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  bookingServices BookingService[]
+
+  @@map("services")
+}
+
+model BookingService {
+  id          String   @id @default(uuid())
+  bookingId   String   @map("booking_id")
+  serviceId   String   @map("service_id")
+  quantity    Int      @default(1)
+  price       Decimal  @db.Decimal(10, 2)
+  requestedAt DateTime @default(now()) @map("requested_at")
+
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service     Service  @relation(fields: [serviceId], references: [id])
+
+  @@map("booking_services")
+}
+
+model Review {
+  id                String   @id @default(uuid())
+  bookingId         String   @unique @map("booking_id")
+  guestId           String   @map("guest_id")
+  hotelId           String   @map("hotel_id")
+  rating            Int
+  cleanlinessRating Int      @map("cleanliness_rating")
+  serviceRating     Int      @map("service_rating")
+  comfortRating     Int      @map("comfort_rating")
+  comment           String?
+  isApproved        Boolean  @default(false) @map("is_approved")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  booking           Booking  @relation(fields: [bookingId], references: [id])
+  guest             User     @relation(fields: [guestId], references: [id])
+  hotel             Hotel    @relation(fields: [hotelId], references: [id])
+
+  @@map("reviews")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique @map("invoice_number") @db.VarChar(20)
+  bookingId       String        @unique @map("booking_id")
+  guestId         String        @map("guest_id")
+  hotelId         String        @map("hotel_id")
+  subtotal        Decimal       @db.Decimal(10, 2)
+  taxAmount       Decimal       @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  totalAmount     Decimal       @map("total_amount") @db.Decimal(10, 2)
+  paymentMethod   PaymentMethod @map("payment_method")
+  paymentStatus   PaymentStatus @default(pending) @map("payment_status")
+  paidAt          DateTime?     @map("paid_at")
+  stripePaymentId String?       @map("stripe_payment_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+  hotel           Hotel         @relation(fields: [hotelId], references: [id])
+  payments        Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id                    String            @id @default(uuid())
+  invoiceId             String            @map("invoice_id")
+  amount                Decimal           @db.Decimal(10, 2)
+  currency              String            @default("USD") @db.VarChar(3)
+  paymentMethod         String            @map("payment_method") @db.VarChar(50)
+  stripePaymentIntentId String?           @map("stripe_payment_intent_id")
+  status                TransactionStatus @default(pending)
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  invoice               Invoice           @relation(fields: [invoiceId], references: [id])
+
+  @@map("payments")
+}
